@@ -865,7 +865,59 @@ local ExternalScripts = {
             local ran, err = pcall(chunk)
             if not ran then warn("[asas] Skin Changer: runtime error — " .. tostring(err)) else print("[asas] Skin Changer: loaded") end
         end
-    }
+    },
+    {
+        Name = "IY",
+        Type = "inline",
+        Source = function()
+            local url = "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"
+            local ok, body = pcall(function() return game:HttpGet(url) end)
+            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
+            local chunk, compileErr = loadstring(body)
+            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
+            local ran, err = pcall(chunk)
+            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
+        end
+    },
+    {
+        Name = "w7w7 lua",
+        Type = "inline",
+        Source = function()
+            local url = "https://pastefy.app/XjnTvDVM/raw"
+            local ok, body = pcall(function() return game:HttpGet(url) end)
+            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
+            local chunk, compileErr = loadstring(body)
+            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
+            local ran, err = pcall(chunk)
+            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
+        end
+    },
+    {
+        Name = "UE Counter",
+        Type = "inline",
+        Source = function()
+            local url = "https://vault.pandauth.com/vss/34a924a96134a9c9"
+            local ok, body = pcall(function() return game:HttpGet(url) end)
+            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
+            local chunk, compileErr = loadstring(body)
+            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
+            local ran, err = pcall(chunk)
+            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
+        end
+    },
+    {
+        Name = "RCLC Paid Cracked",
+        Type = "inline",
+        Source = function()
+            local url = "https://api.luarmor.net/files/v4/loaders/be6ad70a193ee78ffb514ebe5e1a8a8e.lua"
+            local ok, body = pcall(function() return game:HttpGet(url) end)
+            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
+            local chunk, compileErr = loadstring(body)
+            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
+            local ran, err = pcall(chunk)
+            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
+        end
+    },
 }
 
 -- ======================================================================
