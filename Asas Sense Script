@@ -797,6 +797,19 @@ local ExternalScripts = {
         end
     },
     {
+        Name = "Meow Lua Private",
+        Type = "inline",
+        Source = function()
+            local url = "https://pastefy.app/9SrmNSk6/raw"
+            local ok, body = pcall(function() return game:HttpGet(url) end)
+            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] UE Cracked: fetch failed"); return end
+            local chunk, compileErr = loadstring(body)
+            if not chunk then warn("[asas] UE Cracked: compile failed — " .. tostring(compileErr)); return end
+            local ran, err = pcall(chunk)
+            if not ran then warn("[asas] UE Cracked: runtime error — " .. tostring(err)) else print("[asas] UE Cracked: loaded") end
+        end
+    },
+    {
         Name = "Kicia Cracked",
         Type = "inline",
         Source = function()
