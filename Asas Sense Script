@@ -1,11 +1,12 @@
 -- language: Lua, runtime: Roblox executor
--- asas script hub: PuppyWare UI + Auto-Save Config + Autoload Toggle + Visuals + AC bypass + hitbox + rage + ESP + aimbot + teleport + whitelist + movement + script list + watermark.
+-- asas script hub: PuppyWare UI + Auto-Save Config + Autoload Toggle + Visuals + AC bypass + hitbox + rage + ESP + aimbot + teleport + whitelist + movement + script list + watermark + custom show/close script keybinds.
 
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -19,7 +20,6 @@ local ConfigData = {}
 local AutoloadEnabled = true -- デフォルトのオートロード状態
 
 local function SaveConfig()
-    -- Autoload自体の状態も保存データに含める
     ConfigData["_AutoloadEnabled"] = AutoloadEnabled
     local success, encoded = pcall(function() return HttpService:JSONEncode(ConfigData) end)
     if success then pcall(function() writefile(CONFIG_FILE, encoded) end) end
@@ -82,14 +82,16 @@ local function UpdateWatermarkLoop()
     task.spawn(function()
         local gameName = "Unknown"
         pcall(function() gameName = MarketplaceService:GetProductInfo(game.PlaceId).Name end)
-        while Watermark.Parent do
+        while Watermark and Watermark.Parent do
             if Watermark.Enabled then
                 local frames = 0
                 local startTime = tick()
                 local conn = RunService.RenderStepped:Connect(function() frames = frames + 1 end)
                 task.wait(1)
-                conn:Disconnect()
-                local currentFps = math.floor(frames / (tick() - startTime))
+                if conn and conn.Connected then conn:Disconnect() end
+                if not Watermark or not Watermark.Parent then break end
+                local elapsed = tick() - startTime
+                local currentFps = elapsed > 0 and math.floor(frames / elapsed) or 0
                 WM_Text.Text = string.format("FPS: %d | %s | ID: %d | AsasSense", currentFps, gameName, game.PlaceId)
                 WM_Main.Size = UDim2.new(0, WM_Text.TextBounds.X + 20, 0, 30)
             else
@@ -99,7 +101,7 @@ local function UpdateWatermarkLoop()
     end)
 end
 UpdateWatermarkLoop()
-function SetWatermark(state) Watermark.Enabled = state end
+function SetWatermark(state) if Watermark then Watermark.Enabled = state end end
 
 -- ========== AC BYPASS ==========
 local function RunACBypass()
@@ -598,15 +600,16 @@ function Teleport.GoTo(plr)
     return true
 end
 
--- ========== VISUALS (Wings, Trail, Halo, Rain, Snow, Sky) ==========
+-- ========== VISUALS (Wings, Trail, Halo, Asas Crosshair, Rain, Snow, Sky) ==========
 local Visuals = {}
 Visuals.WingsEnabled = false
 Visuals.TrailEnabled = false
 Visuals.HaloEnabled = false
+Visuals.CrosshairEnabled = false
 Visuals.RainEnabled = false
 Visuals.SnowEnabled = false
 Visuals.SkyEnabled = false
-Visuals.SkyColor = Color3.fromRGB(100, 50, 150) -- Default purple
+Visuals.SkyColor = Color3.fromRGB(100, 50, 150)
 
 Visuals.Objects = {}
 Visuals.Connections = {}
@@ -828,6 +831,279 @@ function Visuals.SetHalo(state)
     end
 end
 
+-- 2.8 Asas Crosshair
+local CROSSHAIR_CFG = {
+    WatermarkText = "Asas.Win",
+    Length = 17,
+    Thick = 1,
+    Gap = 10,
+    RotSpd = 150,
+    PulseSpd = 3.5,
+    SizeRng = 5,
+    RGBSpeed = 0.12,
+
+    GlowRadius = 6,
+    GlowStrength = 0.45,
+    GlowLayers = 24,
+
+    TextGlowRadius = 3,
+    TextGlowStrength = 0.25,
+    TextGlowLayers = 6,
+
+    TextColor = Color3.fromRGB(255, 255, 255),
+    LineColor = Color3.fromRGB(255, 255, 255),
+    LineOutlineThick = 1,
+}
+
+local function smoothstepCrosshair(x)
+    x = math.clamp(x, 0, 1)
+    return x * x * (3 - 2 * x)
+end
+
+local function clearCrosshair()
+    if Visuals.Connections.CrosshairInput then
+        Visuals.Connections.CrosshairInput:Disconnect()
+        Visuals.Connections.CrosshairInput = nil
+    end
+    if Visuals.Connections.CrosshairRender then
+        Visuals.Connections.CrosshairRender:Disconnect()
+        Visuals.Connections.CrosshairRender = nil
+    end
+    if Visuals.Objects.CrosshairGui and Visuals.Objects.CrosshairGui.Parent then
+        Visuals.Objects.CrosshairGui:Destroy()
+    end
+    Visuals.Objects.CrosshairGui = nil
+    local targetGui = CoreGui or LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if targetGui and targetGui:FindFirstChild("SleepyStaticCenterCrosshair") then
+        targetGui.SleepyStaticCenterCrosshair:Destroy()
+    end
+end
+
+function Visuals.SetCrosshair(state)
+    if Visuals.CrosshairEnabled == state then return end
+    Visuals.CrosshairEnabled = state
+    clearCrosshair()
+    if not state then return end
+
+    local targetGui = CoreGui or LocalPlayer:WaitForChild("PlayerGui", 5)
+    if not targetGui then return end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "SleepyStaticCenterCrosshair"
+    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
+    screenGui.DisplayOrder = 9999
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = targetGui
+    Visuals.Objects.CrosshairGui = screenGui
+
+    local centerContainer = Instance.new("Frame")
+    centerContainer.Name = "Centro"
+    centerContainer.Size = UDim2.fromOffset(0, 0)
+    centerContainer.Position = UDim2.fromScale(0.5, 0.5)
+    centerContainer.BackgroundTransparency = 1
+    centerContainer.Parent = screenGui
+
+    local cfg = CROSSHAIR_CFG
+    local n = cfg.GlowLayers
+    local glowR = cfg.GlowRadius
+    local outPad = 1
+    local perpBase = cfg.Thick + 2 * outPad
+    local h = 2 * math.ceil(cfg.Gap + cfg.Length + cfg.SizeRng + glowR + outPad + 2)
+
+    local glowSpace = Instance.new("Frame")
+    glowSpace.Name = "GlowSpace"
+    glowSpace.AnchorPoint = Vector2.new(0.5, 0.5)
+    glowSpace.Position = UDim2.fromOffset(0, 0)
+    glowSpace.Size = UDim2.fromOffset(h, h)
+    glowSpace.BackgroundTransparency = 1
+    glowSpace.BorderSizePixel = 0
+    glowSpace.ZIndex = 1
+    glowSpace.Parent = centerContainer
+
+    local function targetGlow(d)
+        return cfg.GlowStrength * (1 - smoothstepCrosshair(d / glowR))
+    end
+
+    local layerTransp = table.create(n, 1)
+    local layerPerp = table.create(n, 0)
+    local layerExtra = table.create(n, 0)
+    for j = 1, n do
+        local tj = targetGlow(glowR * (j - 0.5) / n)
+        local tn = (j < n) and targetGlow(glowR * (j + 0.5) / n) or 0
+        layerTransp[j] = (1 - tj) / (1 - tn)
+        local k = glowR * j / n
+        layerPerp[j] = (perpBase + 2 * k) / h
+        layerExtra[j] = 2 * k
+    end
+
+    local directions = {Vector2.new(0, -1), Vector2.new(0, 1), Vector2.new(-1, 0), Vector2.new(1, 0)}
+    local components = {}
+
+    for i, dir in ipairs(directions) do
+        local isHoriz = dir.X ~= 0
+        local outline = Instance.new("Frame")
+        outline.Name = string.format("Borde_%d", i)
+        outline.BorderSizePixel = 0
+        outline.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        outline.BackgroundTransparency = 0.5
+        outline.AnchorPoint = Vector2.new(0.5, 0.5)
+        outline.ZIndex = 10
+        outline.Parent = centerContainer
+
+        local line = Instance.new("Frame")
+        line.Name = string.format("Linea_%d", i)
+        line.BorderSizePixel = 0
+        line.AnchorPoint = Vector2.new(0.5, 0.5)
+        line.ZIndex = 11
+        line.Parent = centerContainer
+
+        local lineStroke = Instance.new("UIStroke")
+        lineStroke.Name = "ContornoNegro"
+        lineStroke.Thickness = cfg.LineOutlineThick
+        lineStroke.Color = Color3.fromRGB(0, 0, 0)
+        lineStroke.Transparency = 0
+        lineStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        lineStroke.LineJoinMode = Enum.LineJoinMode.Miter
+        lineStroke.Parent = line
+
+        local layers = table.create(n)
+        for j = 1, n do
+            local k = glowR * j / n
+            local glow = Instance.new("Frame")
+            glow.Name = string.format("GlowLayer_%d_%d", i, j)
+            glow.BorderSizePixel = 0
+            glow.AnchorPoint = Vector2.new(isHoriz and (0.5 - dir.X * 0.5) or 0.5, isHoriz and 0.5 or (0.5 - dir.Y * 0.5))
+            glow.Position = UDim2.fromScale(0.5 + dir.X * (cfg.Gap - k) / h, 0.5 + dir.Y * (cfg.Gap - k) / h)
+            glow.BackgroundTransparency = layerTransp[j]
+            glow.ZIndex = n - j + 1
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0.5, 0)
+            corner.Parent = glow
+            glow.Parent = glowSpace
+            table.insert(layers, glow)
+        end
+        table.insert(components, {Line = line, Outline = outline, Glows = layers, Dir = dir, IsHorizontal = isHoriz})
+    end
+
+    local wmLabel = Instance.new("TextLabel")
+    wmLabel.Name = "YokaiWatermark"
+    wmLabel.Text = cfg.WatermarkText
+    wmLabel.Font = Enum.Font.Code
+    wmLabel.TextSize = 13
+    wmLabel.Size = UDim2.fromOffset(100, 20)
+    wmLabel.AnchorPoint = Vector2.new(0.5, 0)
+    wmLabel.BackgroundTransparency = 1
+    wmLabel.ZIndex = 12
+
+    local textStroke = Instance.new("UIStroke")
+    textStroke.Thickness = 1
+    textStroke.Color = Color3.fromRGB(0, 0, 0)
+    textStroke.Transparency = 0.4
+    textStroke.Parent = wmLabel
+
+    wmLabel.Parent = screenGui
+
+    local tgN = cfg.TextGlowLayers
+    local tgR = cfg.TextGlowRadius
+
+    local function textTarget(d)
+        return cfg.TextGlowStrength * (1 - smoothstepCrosshair(d / tgR))
+    end
+
+    local textGlows = {}
+    for j = 1, tgN do
+        local tj = textTarget(tgR * (j - 0.5) / tgN)
+        local tn = (j < tgN) and textTarget(tgR * (j + 0.5) / tgN) or 0
+        local k = tgR * j / tgN
+
+        local glowText = Instance.new("TextLabel")
+        glowText.Name = string.format("TextGlowLayer_%d", j)
+        glowText.Text = cfg.WatermarkText
+        glowText.Font = wmLabel.Font
+        glowText.TextSize = wmLabel.TextSize
+        glowText.Size = wmLabel.Size
+        glowText.AnchorPoint = wmLabel.AnchorPoint
+        glowText.BackgroundTransparency = 1
+        glowText.TextTransparency = 1
+        glowText.ZIndex = 12 - j
+
+        local glowStroke = Instance.new("UIStroke")
+        glowStroke.Thickness = k * 2
+        glowStroke.Transparency = (1 - tj) / (1 - tn)
+        glowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+        glowStroke.LineJoinMode = Enum.LineJoinMode.Round
+        glowStroke.Parent = glowText
+
+        glowText.Parent = screenGui
+        table.insert(textGlows, {Label = glowText, Stroke = glowStroke})
+    end
+
+    local tickCounter, menuMode, smoothPos, smoothRot = 0, false, Vector2.new(0, 0), 0
+
+    Visuals.Connections.CrosshairInput = UserInputService.InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.ButtonSelect then
+            menuMode = not menuMode
+        end
+    end)
+
+    Visuals.Connections.CrosshairRender = RunService.PreRender:Connect(function(dt)
+        if not Visuals.CrosshairEnabled or not centerContainer or not centerContainer.Parent then
+            return
+        end
+        tickCounter += dt
+
+        local targetPos = not menuMode
+            and (screenGui.AbsoluteSize * 0.5)
+            or (GuiService.SelectedObject and (GuiService.SelectedObject.AbsolutePosition + (GuiService.SelectedObject.AbsoluteSize * 0.5)) or UserInputService:GetMouseLocation())
+        smoothPos = smoothPos:Lerp(targetPos, 1 - math.exp(-25 * dt))
+        centerContainer.Position = UDim2.fromOffset(smoothPos.X, smoothPos.Y)
+
+        local pulse = math.sin(tickCounter * cfg.PulseSpd)
+        local dynamicLength = cfg.Length + (pulse * cfg.SizeRng)
+        smoothRot = (smoothRot + (cfg.RotSpd * (0.35 + ((pulse + 1) * 0.5 * (1.75 - 0.35)))) * dt) % 360
+        centerContainer.Rotation = smoothRot
+
+        local currentColor = Color3.fromHSV((tickCounter * cfg.RGBSpeed) % 1, 1, 1)
+
+        for _, comp in ipairs(components) do
+            local centerOffset = cfg.Gap + (dynamicLength * 0.5)
+            local posX, posY = comp.Dir.X * centerOffset, comp.Dir.Y * centerOffset
+            local sizeW, sizeH = comp.IsHorizontal and dynamicLength or cfg.Thick, comp.IsHorizontal and cfg.Thick or dynamicLength
+
+            comp.Line.Size = UDim2.fromOffset(sizeW, sizeH)
+            comp.Line.Position = UDim2.fromOffset(posX, posY)
+            comp.Line.BackgroundColor3 = currentColor
+            comp.Outline.Size = UDim2.fromOffset(sizeW + (comp.IsHorizontal and 0 or 2), sizeH + (comp.IsHorizontal and 2 or 0))
+            comp.Outline.Position = UDim2.fromOffset(posX, posY)
+            comp.Line.BackgroundColor3 = cfg.LineColor
+
+            for j, glow in ipairs(comp.Glows) do
+                local along = (dynamicLength + layerExtra[j]) / h
+                glow.Size = comp.IsHorizontal and UDim2.fromScale(along, layerPerp[j]) or UDim2.fromScale(layerPerp[j], along)
+                glow.BackgroundColor3 = currentColor
+                glow.BackgroundColor3 = cfg.LineColor
+            end
+        end
+
+        wmLabel.Text = cfg.WatermarkText
+
+        local maxLineLength = cfg.Length + cfg.SizeRng
+        local fixedBottomOffset = cfg.Gap + maxLineLength
+
+        wmLabel.Position = UDim2.fromOffset(smoothPos.X, smoothPos.Y + fixedBottomOffset + 0)
+        wmLabel.TextColor3 = currentColor
+        wmLabel.TextColor3 = cfg.TextColor
+
+        for _, tg in ipairs(textGlows) do
+            tg.Label.Text = cfg.WatermarkText
+            tg.Label.Position = wmLabel.Position
+            tg.Stroke.Color = currentColor
+            tg.Stroke.Color = cfg.TextColor
+        end
+    end)
+end
+
 -- 3. Sky Color
 local OrigSky = nil
 function Visuals.SetSkyColor(state, color)
@@ -924,6 +1200,20 @@ function Visuals.SetSnow(state)
     else
         if Visuals.Connections.Snow then Visuals.Connections.Snow:Disconnect(); Visuals.Connections.Snow = nil end
         if SnowPart then SnowPart:Destroy(); SnowPart = nil end
+    end
+end
+
+function Visuals.CleanupAll()
+    Visuals.SetWings(false)
+    Visuals.SetTrail(false)
+    Visuals.SetHalo(false)
+    Visuals.SetCrosshair(false)
+    Visuals.SetRain(false)
+    Visuals.SetSnow(false)
+    if Visuals.SkyEnabled then Visuals.SetSkyColor(false) end
+    for k, conn in pairs(Visuals.Connections) do
+        if conn and conn.Disconnect then conn:Disconnect() end
+        Visuals.Connections[k] = nil
     end
 end
 
@@ -1130,7 +1420,14 @@ local Passed, Statement = pcall(function()
 	
     function library:CreateWindow(Properties)
 		Properties = Properties or {}
-		local Window = { Pages = {}, Accent = Color3.fromRGB(255, 120, 30), Enabled = true, Key = Enum.KeyCode.Z }
+		local Window = {
+            Pages = {},
+            Accent = Color3.fromRGB(255, 120, 30),
+            Enabled = true,
+            ShowKey = { "KeyCode", "Z" },
+            CloseKey = { "KeyCode", "X" },
+            _unloaded = false,
+        }
 		do
 			local ScreenGui = utility:RenderObject("ScreenGui", {DisplayOrder = 9999, Enabled = true, IgnoreGuiInset = true, Parent = cre, ResetOnSpawn = false, ZIndexBehavior = "Global"})
 			local ScreenGui_MainFrame = utility:RenderObject("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Color3.fromRGB(25, 25, 25), BackgroundTransparency = 0, BorderColor3 = Color3.fromRGB(12, 12, 12), BorderMode = "Inset", BorderSizePixel = 1, Parent = ScreenGui, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 660, 0, 560)})
@@ -1151,8 +1448,9 @@ local Passed, Statement = pcall(function()
 					for index, page in pairs(Window.Pages) do if page.Open and page ~= Page then page:Set(false) end end
 				end
 				function Window:Fade(state)
+					if Window._unloaded or not ScreenGui or not ScreenGui.Parent then return end
 					for index, render in pairs(library.Renders) do
-						if not render[3] then
+						if not render[3] and render[1] and render[1].Parent then
 							if render[1].ClassName == "Frame" and (render[2]["BackgroundTransparency"] or 0) ~= 1 then
 								tws:Create(render[1], TweenInfo.new(render[4] or 0.25, Enum.EasingStyle["Linear"], state and Enum.EasingDirection["Out"] or Enum.EasingDirection["In"]), {BackgroundTransparency = state and (render[2]["BackgroundTransparency"] or 0) or 1}):Play()
 							elseif render[1].ClassName == "ImageLabel" then
@@ -1170,20 +1468,72 @@ local Passed, Statement = pcall(function()
 							end
 						end
 					end
-					if not state then task.delay(0.3, function() if not Window.Enabled then ScreenGui.Enabled = false end end)
-					else ScreenGui.Enabled = true end
+					if not state then
+						task.delay(0.3, function()
+							if not Window._unloaded and not Window.Enabled and ScreenGui and ScreenGui.Parent then
+								ScreenGui.Enabled = false
+							end
+						end)
+					else
+						ScreenGui.Enabled = true
+					end
+				end
+				function Window:ToggleVisibility(forceState)
+					if Window._unloaded then return end
+					local nextState = (forceState ~= nil) and forceState or (not Window.Enabled)
+					Window.Enabled = nextState
+					Window:Fade(Window.Enabled)
 				end
 				function Window:Unload()
-					ScreenGui:Remove()
-					for index, connection in pairs(library.Connections) do connection:Disconnect() end
-					library = nil; utility = nil
+					if Window._unloaded then return end
+					Window._unloaded = true
+					Window.Enabled = false
+					pcall(function() Hitbox.Set(false) end)
+					pcall(function() Rage.Set(false) end)
+					pcall(function() ESP.Stop() end)
+					pcall(function() Aim.SetAssist(false); Aim.SetSilent(false); Aim.SetTrigger(false) end)
+					pcall(function() Movement.SetFly(false); Movement.SetFling(false); Movement.SetNoclip(false); Movement.SetSpeed(false) end)
+					pcall(function() Misc.SetFullbright(false); Misc.SetAntiAFK(false) end)
+					pcall(function() Visuals.CleanupAll() end)
+					if Watermark and Watermark.Parent then
+						Watermark.Enabled = false
+						Watermark:Destroy()
+						Watermark = nil
+					end
+					if ScreenGui and ScreenGui.Parent then
+						ScreenGui:Destroy()
+					end
+					for index, connection in pairs(library.Connections) do
+						if connection and connection.Connected then connection:Disconnect() end
+					end
+					library.Connections = {}
+					library.Renders = {}
 				end
 			end
 			do Window["TabsHolder"] = InnerBorder_InnerFrame_Tabs; Window["PagesHolder"] = InnerBorder_InnerFrame_Folder end
 			do
+				local function matchesBind(input, bind)
+					if type(bind) ~= "table" or not bind[1] or not bind[2] then return false end
+					local enumGroup = Enum[bind[1]]
+					local targetEnum = enumGroup and enumGroup[bind[2]]
+					if not targetEnum then return false end
+					if bind[1] == "KeyCode" then
+						return input.KeyCode == targetEnum
+					elseif bind[1] == "UserInputType" then
+						return input.UserInputType == targetEnum
+					end
+					return false
+				end
+
 				utility:CreateConnection(uis.InputBegan, function(Input)
-					if Input.KeyCode and Input.KeyCode == Window.Key then Window.Enabled = not Window.Enabled; Window:Fade(Window.Enabled)
-					elseif Input.KeyCode and Input.KeyCode == Enum.KeyCode.X then Window:Unload() end
+					if Window._unloaded or uis:GetFocusedTextBox() then return end
+					if matchesBind(Input, Window.CloseKey) then
+						Window:Unload()
+						return
+					end
+					if matchesBind(Input, Window.ShowKey) then
+						Window:ToggleVisibility()
+					end
 				end)
 			end
 		end
@@ -1278,7 +1628,6 @@ local Passed, Statement = pcall(function()
         function sections:CreateToggle(Properties)
             Properties = Properties or {}
             local Content = {Name = Properties.Name or "New Toggle", State = Properties.State or false, Callback = Properties.Callback or function() end, Window = self.Window, Page = self.Page, Section = self, Keybind = nil, HoldingKeybind = false, Id = Properties.Id or Content.Name}
-            -- オートロードが有効な場合のみ、保存された設定を読み込む
             if AutoloadEnabled and ConfigData[Content.Id] then 
                 if ConfigData[Content.Id].State ~= nil then Content.State = ConfigData[Content.Id].State end
                 if ConfigData[Content.Id].Keybind ~= nil then Content.Keybind = ConfigData[Content.Id].Keybind end
@@ -1506,50 +1855,110 @@ local Passed, Statement = pcall(function()
 
         function sections:CreateKeybind(Properties)
             Properties = Properties or {}
-            local Content = {Name = Properties.Name or "New Keybind", State = Properties.State or nil, Mode = Properties.Mode or "Hold", Callback = Properties.Callback or function() end, Active = false, Holding = false, Window = self.Window, Page = self.Page, Section = self, Id = Properties.Id or Properties.Name}
-            if AutoloadEnabled and Content.Id and ConfigData[Content.Id] and ConfigData[Content.Id].State then Content.State = ConfigData[Content.Id].State end
-            local Keys = {KeyCodes = {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C", "V", "B", "N", "M", "One", "Two", "Three", "Four", "Five", "Six", "Seveen", "Eight", "Nine", "0", "Insert", "Tab", "Home", "End", "LeftAlt", "LeftControl", "LeftShift", "RightAlt", "RightControl", "RightShift", "CapsLock"}, Inputs = {"MouseButton1", "MouseButton2", "MouseButton3"}, Shortened = {["MouseButton1"] = "M1", ["MouseButton2"] = "M2", ["MouseButton3"] = "M3", ["Insert"] = "INS", ["LeftAlt"] = "LA", ["LeftControl"] = "LC", ["LeftShift"] = "LS", ["RightAlt"] = "RA", ["RightControl"] = "RC", ["RightShift"] = "RS", ["CapsLock"] = "CL"}}
+            local Content = {
+                Name = Properties.Name or "New Keybind",
+                State = Properties.State or nil,
+                Mode = Properties.Mode or "Hold",
+                Callback = Properties.Callback or function() end,
+                Active = false,
+                Holding = false,
+                Window = self.Window,
+                Page = self.Page,
+                Section = self,
+                Id = Properties.Id or Properties.Name,
+                ListenAllKeys = Properties.ListenAllKeys or false,
+            }
+            if AutoloadEnabled and Content.Id and ConfigData[Content.Id] and type(ConfigData[Content.Id].State) == "table" then
+                Content.State = ConfigData[Content.Id].State
+            end
+            local Keys = {
+                KeyCodes = {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C", "V", "B", "N", "M", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Seveen", "Eight", "Nine", "Zero", "0", "Insert", "Delete", "Tab", "Home", "End", "LeftAlt", "LeftControl", "LeftShift", "RightAlt", "RightControl", "RightShift", "CapsLock", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"},
+                Inputs = {"MouseButton1", "MouseButton2", "MouseButton3"},
+                Shortened = {["MouseButton1"] = "M1", ["MouseButton2"] = "M2", ["MouseButton3"] = "M3", ["Insert"] = "INS", ["Delete"] = "DEL", ["LeftAlt"] = "LA", ["LeftControl"] = "LC", ["LeftShift"] = "LS", ["RightAlt"] = "RA", ["RightControl"] = "RC", ["RightShift"] = "RS", ["CapsLock"] = "CL"}
+            }
             do
                 local Content_Holder = utility:RenderObject("Frame", {BackgroundTransparency = 1, BorderSizePixel = 0, Parent = Content.Section.Holder, Size = UDim2.new(1, 0, 0, 18), ZIndex = 3})
                 utility:RenderObject("TextLabel", {BackgroundTransparency = 1, BorderSizePixel = 0, Parent = Content_Holder, Position = UDim2.new(0, 41, 0, 0), Size = UDim2.new(1, -41, 1, 0), ZIndex = 3, Font = "Code", Text = Content.Name, TextColor3 = Color3.fromRGB(205, 205, 205), TextSize = 9, TextXAlignment = "Left"})
                 local Content_Holder_Button = utility:RenderObject("TextButton", {BackgroundTransparency = 1, BorderSizePixel = 0, Parent = Content_Holder, Size = UDim2.new(1, 0, 1, 0), Text = ""})
                 local Content_Holder_Value = utility:RenderObject("TextLabel", {BackgroundTransparency = 1, BorderSizePixel = 0, Parent = Content_Holder, Position = UDim2.new(0, 41, 0, 0), Size = UDim2.new(1, -61, 1, 0), ZIndex = 3, Font = "Code", Text = "", TextColor3 = Color3.fromRGB(114, 114, 114), TextSize = 9, TextXAlignment = "Right"})
                 function Content:Set(state, isLoad)
-                    Content.State = state or {}; Content.Active = false
-                    Content_Holder_Value.Text = "[" .. (#Content:Get() > 0 and Content:Shorten(Content:Get()[2]) or "-") .. "]"
-                    Content.Callback(Content:Get())
-                    if not isLoad and AutoloadEnabled and Content.Id then ConfigData[Content.Id] = ConfigData[Content.Id] or {}; ConfigData[Content.Id].State = state; SaveConfig() end
+                    Content.State = (type(state) == "table") and state or {}
+                    Content.Active = false
+                    local label = (#Content:Get() >= 2) and Content:Shorten(Content:Get()[2]) or "-"
+                    Content_Holder_Value.Text = "[" .. label .. "]"
+                    if Content.Mode == "BindOnly" then
+                        Content.Callback(Content:Get())
+                    elseif not isLoad then
+                        Content.Callback(Content.Active)
+                    end
+                    if not isLoad and AutoloadEnabled and Content.Id then ConfigData[Content.Id] = ConfigData[Content.Id] or {}; ConfigData[Content.Id].State = Content.State; SaveConfig() end
                 end
                 function Content:Get() return Content.State end
                 function Content:Shorten(Str) for i, v in pairs(Keys.Shortened) do Str = string.gsub(Str, i, v) end return Str end
                 function Content:Change(Key)
-                    if Key.EnumType then
+                    if Key and Key.EnumType then
                         if Key.EnumType == Enum.KeyCode or Key.EnumType == Enum.UserInputType then
-                            if table.find(Keys.KeyCodes, Key.Name) or table.find(Keys.Inputs, Key.Name) then Content:Set({Key.EnumType == Enum.KeyCode and "KeyCode" or "UserInputType", Key.Name}); return true end
+                            if Content.ListenAllKeys or table.find(Keys.KeyCodes, Key.Name) or table.find(Keys.Inputs, Key.Name) then
+                                Content:Set({Key.EnumType == Enum.KeyCode and "KeyCode" or "UserInputType", Key.Name})
+                                return true
+                            end
                         end
                     end
+                    return false
                 end
-                utility:CreateConnection(Content_Holder_Button.MouseButton1Click, function() Content.Holding = true; Content_Holder_Value.TextColor3 = Color3.fromRGB(255, 0, 0) end)
-                utility:CreateConnection(Content_Holder_Button.MouseButton2Click, function() Content:Set() end)
+                utility:CreateConnection(Content_Holder_Button.MouseButton1Click, function()
+                    Content.Holding = true
+                    Content_Holder_Value.TextColor3 = Color3.fromRGB(255, 0, 0)
+                end)
+                utility:CreateConnection(Content_Holder_Button.MouseButton2Click, function()
+                    Content.Holding = false
+                    Content_Holder_Value.TextColor3 = Color3.fromRGB(114, 114, 114)
+                    Content:Set({})
+                end)
                 utility:CreateConnection(Content_Holder_Button.MouseEnter, function() Content_Holder_Value.TextColor3 = Color3.fromRGB(164, 164, 164) end)
                 utility:CreateConnection(Content_Holder_Button.MouseLeave, function() Content_Holder_Value.TextColor3 = Content.Holding and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(114, 114, 114) end)
                 utility:CreateConnection(uis.InputBegan, function(Input)
                     if Content.Holding then
+                        if Input.KeyCode == Enum.KeyCode.Escape then
+                            Content.Holding = false
+                            Content_Holder_Value.TextColor3 = Color3.fromRGB(114, 114, 114)
+                            Content:Set({})
+                            return
+                        end
                         local Success = Content:Change(Input.KeyCode.Name ~= "Unknown" and Input.KeyCode or Input.UserInputType)
-                        if Success then Content.Holding = false; Content_Holder_Value.TextColor3 = Color3.fromRGB(114, 114, 114) end
+                        if Success then
+                            Content.Holding = false
+                            Content_Holder_Value.TextColor3 = Color3.fromRGB(114, 114, 114)
+                        end
+                        return
                     end
-                    if Content:Get()[1] and Content:Get()[2] then
-                        if Input.KeyCode == Enum[Content:Get()[1]][Content:Get()[2]] or Input.UserInputType == Enum[Content:Get()[1]][Content:Get()[2]] then
-                            if Content.Mode == "Hold" then Content.Active = true
-                            elseif Content.Mode == "Toggle" then Content.Active = not Content.Active end
-                            Content.Callback(Content.Active)
+                    if uis:GetFocusedTextBox() then return end
+                    local cur = Content:Get()
+                    if cur[1] and cur[2] then
+                        local enumGroup = Enum[cur[1]]
+                        local targetEnum = enumGroup and enumGroup[cur[2]]
+                        if targetEnum and ((cur[1] == "KeyCode" and Input.KeyCode == targetEnum) or (cur[1] == "UserInputType" and Input.UserInputType == targetEnum)) then
+                            if Content.Mode == "Hold" then
+                                Content.Active = true
+                                Content.Callback(Content.Active)
+                            elseif Content.Mode == "Toggle" then
+                                Content.Active = not Content.Active
+                                Content.Callback(Content.Active)
+                            elseif Content.Mode == "Action" then
+                                Content.Callback(true)
+                            end
                         end
                     end
                 end)
                 utility:CreateConnection(uis.InputEnded, function(Input)
-                    if Content:Get()[1] and Content:Get()[2] then
-                        if Input.KeyCode == Enum[Content:Get()[1]][Content:Get()[2]] or Input.UserInputType == Enum[Content:Get()[1]][Content:Get()[2]] then
-                            if Content.Mode == "Hold" then Content.Active = false; Content.Callback(Content.Active) end
+                    if Content.Mode ~= "Hold" then return end
+                    local cur = Content:Get()
+                    if cur[1] and cur[2] then
+                        local enumGroup = Enum[cur[1]]
+                        local targetEnum = enumGroup and enumGroup[cur[2]]
+                        if targetEnum and ((cur[1] == "KeyCode" and Input.KeyCode == targetEnum) or (cur[1] == "UserInputType" and Input.UserInputType == targetEnum)) then
+                            Content.Active = false
+                            Content.Callback(Content.Active)
                         end
                     end
                 end)
@@ -1589,7 +1998,6 @@ local Passed, Statement = pcall(function()
 	local visualTab = window:CreatePage({Icon = "rbxassetid://8547254518"})
 	local playerTab = window:CreatePage({Icon = "rbxassetid://8547256547"})
 	local miscTab = window:CreatePage({Icon = "rbxassetid://8547269749"})
-    local visualTab = window:CreatePage({Icon = "rbxassetid://8547254518"}) -- Visuals用タブ（仮アイコン）
 
 	-- Visual Tab
 	local rageSec = visualTab:CreateSection({Name = "Rage", Size = 150, Side = "Left"})
@@ -1637,7 +2045,6 @@ local Passed, Statement = pcall(function()
         end
     end})
 
-    -- Player Selector for Whitelist (Multi-Select)
     local wlOptions = {}
     local wlActiveIndices = {}
     for i, p in ipairs(Players:GetPlayers()) do
@@ -1658,7 +2065,6 @@ local Passed, Statement = pcall(function()
         print("[asas] Whitelist updated via UI: " .. tostring(#selectedIndices) .. " players")
     end})
 
-    -- Player Selector for Teleport
     local targetPlayer = nil
     local tpOptions = {}
     for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(tpOptions, p.Name) end end
@@ -1681,7 +2087,7 @@ local Passed, Statement = pcall(function()
         end
     end})
 
-    -- Aim Tab (New)
+    -- Aim Tab
     local aimTab = window:CreatePage({Icon = "rbxassetid://8547249956"})
     
     local aimSec = aimTab:CreateSection({Name = "Aim Assist", Size = 140, Side = "Left"})
@@ -1699,17 +2105,17 @@ local Passed, Statement = pcall(function()
     triggerSec:CreateToggle({Id = "Triggerbot", Name = "Triggerbot", State = false, Callback = function(state) Aim.SetTrigger(state) end})
     triggerSec:CreateSlider({Id = "TriggerDelay", Name = "Delay (s)", State = Aim.TriggerDelay, Min = 0, Max = 1, Decimals = 2, Callback = function(val) Aim.TriggerDelay = val end})
 
-    -- Visuals Tab (New)
+    -- Visuals Tab
     local visTab = window:CreatePage({Icon = "rbxassetid://8547256547"})
-    local visSec = visTab:CreateSection({Name = "Visuals", Size = 220, Side = "Left"})
+    local visSec = visTab:CreateSection({Name = "Visuals", Size = 245, Side = "Left"})
     local skySec = visTab:CreateSection({Name = "Sky & Weather", Size = 180, Side = "Right"})
 
     visSec:CreateToggle({Id = "Wings", Name = "Wings", State = false, Callback = function(state) Visuals.SetWings(state) end})
     visSec:CreateToggle({Id = "Trail", Name = "Trail", State = false, Callback = function(state) Visuals.SetTrail(state) end})
     visSec:CreateToggle({Id = "Halo", Name = "Halo Aura", State = false, Callback = function(state) Visuals.SetHalo(state) end})
+    visSec:CreateToggle({Id = "AsasCrosshair", Name = "Asas Crosshair", State = false, Callback = function(state) Visuals.SetCrosshair(state) end})
     
     skySec:CreateToggle({Id = "SkyColor", Name = "Sky Color", State = false, Callback = function(state) Visuals.SetSkyColor(state, Visuals.SkyColor) end})
-    -- 色変更ボタン
     skySec:CreateButton({Name = "Random Sky Color", Callback = function()
         Visuals.SkyColor = Color3.fromRGB(math.random(0,255), math.random(0,255), math.random(0,255))
         if Visuals.SkyEnabled then Visuals.SetSkyColor(true, Visuals.SkyColor) end
@@ -1719,18 +2125,47 @@ local Passed, Statement = pcall(function()
     skySec:CreateToggle({Id = "Snow", Name = "Snow", State = false, Callback = function(state) Visuals.SetSnow(state) end})
 
     -- Misc Tab
-    local miscSec = miscTab:CreateSection({Name = "Misc", Size = 240, Side = "Left"})
+    local miscSec = miscTab:CreateSection({Name = "Misc", Size = 285, Side = "Left"})
     miscSec:CreateToggle({Id = "Fullbright", Name = "Fullbright", State = false, Callback = function(state) Misc.SetFullbright(state) end})
     miscSec:CreateToggle({Id = "AntiAFK", Name = "Anti-AFK", State = false, Callback = function(state) Misc.SetAntiAFK(state) end})
     miscSec:CreateToggle({Id = "FPSUnlock", Name = "FPS Unlock", State = false, Callback = function(state) Misc.SetFPSUnlock(state) end})
     miscSec:CreateToggle({Id = "Watermark", Name = "Watermark", State = false, Callback = function(state) SetWatermark(state) end})
     
-    -- Autoload Toggle (Misc Tabに追加)
     miscSec:CreateToggle({Id = "Autoload", Name = "Autoload Config", State = AutoloadEnabled, Callback = function(state)
         AutoloadEnabled = state
         SaveConfig()
         print("[asas] Autoload set to: " .. tostring(state))
     end})
+
+    miscSec:CreateKeybind({
+        Id = "ScriptShowKeybind",
+        Name = "Script Show Keybind",
+        State = { "KeyCode", "Z" },
+        Mode = "BindOnly",
+        ListenAllKeys = true,
+        Callback = function(bind)
+            if type(bind) == "table" and bind[1] and bind[2] then
+                window.ShowKey = { bind[1], bind[2] }
+            else
+                window.ShowKey = nil
+            end
+        end
+    })
+
+    miscSec:CreateKeybind({
+        Id = "CloseScriptKeybind",
+        Name = "Close Script Keybind",
+        State = { "KeyCode", "X" },
+        Mode = "BindOnly",
+        ListenAllKeys = true,
+        Callback = function(bind)
+            if type(bind) == "table" and bind[1] and bind[2] then
+                window.CloseKey = { bind[1], bind[2] }
+            else
+                window.CloseKey = nil
+            end
+        end
+    })
 
     -- Scripts Section (Misc Tab)
     local scriptSec = miscTab:CreateSection({Name = "Scripts", Size = 250, Side = "Right"})
