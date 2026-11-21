@@ -1,5 +1,5 @@
 -- language: Lua, runtime: Roblox executor
--- asas script hub: PuppyWare UI + Auto-Save Config + Autoload Toggle + Visuals + AC bypass + hitbox + rage + ESP + aimbot + teleport + whitelist + movement + script list + watermark + custom show/close script keybinds.
+-- asas script hub: PuppyWare UI + Auto-Save Config + Autoload Toggle + Visuals + AC bypass + hitbox + rage + ESP + aimbot + teleport + whitelist + movement + script list + script sets + watermark + custom show/close script keybinds.
 
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
@@ -358,7 +358,7 @@ end
 
 -- ========== MISC ==========
 local Misc = {}
-Misc.Fullbright = false; Misc.AntiAFK = false; Misc.AntiAFK_conn = nil; Misc.FPSUnlock = false
+Misc.Fullbright = false; Misc.AntiAFK = false; Misc.AntiAFK_conn = nil; Misc.FPSUnlock = false; Misc.RivalsSkinChanger = false
 local OrigLighting = { Brightness = Lighting.Brightness, Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient, FogEnd = Lighting.FogEnd }
 function Misc.SetFullbright(state)
     if Misc.Fullbright == state then return end
@@ -387,6 +387,31 @@ function Misc.SetFPSUnlock(state)
     if Misc.FPSUnlock == state then return end
     Misc.FPSUnlock = state
     if state then pcall(function() setfpscap(240) end) else pcall(function() setfpscap(60) end) end
+end
+function Misc.SetRivalsSkinChanger(state)
+    if Misc.RivalsSkinChanger == state then return end
+    Misc.RivalsSkinChanger = state
+    if state then
+        local url = "https://pastebin.com/raw/geGFqiZ9"
+        local ok, body = pcall(function() return game:HttpGet(url) end)
+        if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then
+            warn("[asas] Skin Changer: fetch failed")
+            return
+        end
+        local chunk, compileErr = loadstring(body)
+        if not chunk then
+            warn("[asas] Skin Changer: compile failed — " .. tostring(compileErr))
+            return
+        end
+        local ran, err = pcall(chunk)
+        if not ran then
+            warn("[asas] Skin Changer: runtime error — " .. tostring(err))
+        else
+            print("[asas] Skin Changer: loaded")
+        end
+    else
+        print("[asas] Skin Changer: disabled")
+    end
 end
 
 -- ========== ADVANCED ESP ==========
@@ -1227,46 +1252,47 @@ end)
 
 
 -- ======================================================================
--- SCRIPTS (External List)
+-- SCRIPTS (External List & Sets)
 -- ======================================================================
+local function runRemoteScript(label, url)
+    local ok, body = pcall(function() return game:HttpGet(url) end)
+    if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then
+        warn("[asas] " .. label .. ": fetch failed")
+        return
+    end
+    local chunk, compileErr = loadstring(body)
+    if not chunk then
+        warn("[asas] " .. label .. ": compile failed — " .. tostring(compileErr))
+        return
+    end
+    local ran, err = pcall(chunk)
+    if not ran then
+        warn("[asas] " .. label .. ": runtime error — " .. tostring(err))
+    else
+        print("[asas] " .. label .. ": loaded")
+    end
+end
+
 local ExternalScripts = {
     {
         Name = "UE Cracked",
         Type = "inline",
         Source = function()
-            local url = "https://raw.githubusercontent.com/Kiciahooklua/UnnamedEnhancementsFree/refs/heads/main/UeCrack-2-patched.lua"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] UE Cracked: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] UE Cracked: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] UE Cracked: runtime error — " .. tostring(err)) else print("[asas] UE Cracked: loaded") end
+            runRemoteScript("UE Cracked", "https://raw.githubusercontent.com/Kiciahooklua/UnnamedEnhancementsFree/refs/heads/main/UeCrack-2-patched.lua")
         end
     },
     {
         Name = "Meow Lua Private",
         Type = "inline",
         Source = function()
-            local url = "https://pastefy.app/9SrmNSk6/raw"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] UE Cracked: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] UE Cracked: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] UE Cracked: runtime error — " .. tostring(err)) else print("[asas] UE Cracked: loaded") end
+            runRemoteScript("Meow Lua Private", "https://pastefy.app/9SrmNSk6/raw")
         end
     },
     {
         Name = "Kicia Cracked",
         Type = "inline",
         Source = function()
-            local url = "https://raw.githubusercontent.com/finwo67/finhub-skid-kiciahook/refs/heads/main/kiciahook"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Kicia Cracked: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] Kicia Cracked: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] Kicia Cracked: runtime error — " .. tostring(err)) else print("[asas] Kicia Cracked: loaded") end
+            runRemoteScript("Kicia Cracked", "https://raw.githubusercontent.com/finwo67/finhub-skid-kiciahook/refs/heads/main/kiciahook")
         end
     },
     {
@@ -1301,83 +1327,43 @@ local ExternalScripts = {
         end
     },
     {
-        Name = "Asas Crosshair",
-        Type = "inline",
-        Source = function()
-            local url = "https://pastefy.app/f1yzWEQx/raw"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
-        end
-    },
-    {
-        Name = "Rivals Skin Changer",
-        Type = "inline",
-        Source = function()
-            local url = "https://pastebin.com/raw/geGFqiZ9"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Skin Changer: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] Skin Changer: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] Skin Changer: runtime error — " .. tostring(err)) else print("[asas] Skin Changer: loaded") end
-        end
-    },
-    {
         Name = "IY",
         Type = "inline",
         Source = function()
-            local url = "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
+            runRemoteScript("IY", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
         end
     },
     {
         Name = "w7w7 lua",
         Type = "inline",
         Source = function()
-            local url = "https://pastefy.app/XjnTvDVM/raw"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
+            runRemoteScript("w7w7 lua", "https://pastefy.app/XjnTvDVM/raw")
         end
     },
     {
         Name = "UE Counter",
         Type = "inline",
         Source = function()
-            local url = "https://vault.pandauth.com/vss/34a924a96134a9c9"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
+            runRemoteScript("UE Counter", "https://vault.pandauth.com/vss/34a924a96134a9c9")
         end
     },
     {
         Name = "RCLC Paid Cracked",
         Type = "inline",
         Source = function()
-            local url = "https://api.luarmor.net/files/v4/loaders/be6ad70a193ee78ffb514ebe5e1a8a8e.lua"
-            local ok, body = pcall(function() return game:HttpGet(url) end)
-            if not ok or type(body) ~= "string" or #body == 0 or body:find("404: Not Found") then warn("[asas] Crosshair: fetch failed"); return end
-            local chunk, compileErr = loadstring(body)
-            if not chunk then warn("[asas] Crosshair: compile failed — " .. tostring(compileErr)); return end
-            local ran, err = pcall(chunk)
-            if not ran then warn("[asas] Crosshair: runtime error — " .. tostring(err)) else print("[asas] Crosshair: loaded") end
+            runRemoteScript("RCLC Paid Cracked", "https://api.luarmor.net/files/v4/loaders/be6ad70a193ee78ffb514ebe5e1a8a8e.lua")
         end
     },
+}
+
+local ScriptSets = {
+    {
+        Name = "HVH SET",
+        Scripts = {
+            { Name = "HVH Set Script 1", Url = "https://pastefy.app/kpAIDdfF/raw" },
+            { Name = "HVH Set Script 2", Url = "https://pastefy.app/XjnTvDVM/raw" },
+        }
+    }
 }
 
 -- ======================================================================
@@ -2125,7 +2111,7 @@ local Passed, Statement = pcall(function()
     skySec:CreateToggle({Id = "Snow", Name = "Snow", State = false, Callback = function(state) Visuals.SetSnow(state) end})
 
     -- Misc Tab
-    local miscSec = miscTab:CreateSection({Name = "Misc", Size = 285, Side = "Left"})
+    local miscSec = miscTab:CreateSection({Name = "Misc", Size = 310, Side = "Left"})
     miscSec:CreateToggle({Id = "Fullbright", Name = "Fullbright", State = false, Callback = function(state) Misc.SetFullbright(state) end})
     miscSec:CreateToggle({Id = "AntiAFK", Name = "Anti-AFK", State = false, Callback = function(state) Misc.SetAntiAFK(state) end})
     miscSec:CreateToggle({Id = "FPSUnlock", Name = "FPS Unlock", State = false, Callback = function(state) Misc.SetFPSUnlock(state) end})
@@ -2135,6 +2121,10 @@ local Passed, Statement = pcall(function()
         AutoloadEnabled = state
         SaveConfig()
         print("[asas] Autoload set to: " .. tostring(state))
+    end})
+
+    miscSec:CreateToggle({Id = "RivalsSkinChanger", Name = "Rivals Skin Changer", State = false, Callback = function(state)
+        Misc.SetRivalsSkinChanger(state)
     end})
 
     miscSec:CreateKeybind({
@@ -2168,7 +2158,7 @@ local Passed, Statement = pcall(function()
     })
 
     -- Scripts Section (Misc Tab)
-    local scriptSec = miscTab:CreateSection({Name = "Scripts", Size = 250, Side = "Right"})
+    local scriptSec = miscTab:CreateSection({Name = "Scripts", Size = 325, Side = "Right"})
     
     local scriptOptions = {}
     for i, v in ipairs(ExternalScripts) do table.insert(scriptOptions, v.Name) end
@@ -2186,6 +2176,30 @@ local Passed, Statement = pcall(function()
                 local ok, err = pcall(scriptData.Source)
                 if not ok then warn("[asas] " .. scriptData.Name .. " failed: " .. tostring(err)) end
             end
+        end
+    end})
+
+    local setOptions = {}
+    for _, s in ipairs(ScriptSets) do table.insert(setOptions, s.Name) end
+    local selectedSetIndex = 1
+
+    scriptSec:CreateDropdown({Id = "ScriptSetSelect", Name = "Select Set", State = 1, Options = setOptions, Callback = function(opt)
+        for idx, s in ipairs(ScriptSets) do
+            if s.Name == opt then
+                selectedSetIndex = idx
+                break
+            end
+        end
+    end})
+
+    scriptSec:CreateButton({Name = "SET EXECUTE", Callback = function()
+        local setData = ScriptSets[selectedSetIndex]
+        if not setData then return end
+        print("[asas] Executing Set: " .. setData.Name)
+        for _, entry in ipairs(setData.Scripts) do
+            task.spawn(function()
+                runRemoteScript(entry.Name, entry.Url)
+            end)
         end
     end})
 end)
