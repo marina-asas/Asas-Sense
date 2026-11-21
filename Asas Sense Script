@@ -598,10 +598,11 @@ function Teleport.GoTo(plr)
     return true
 end
 
--- ========== VISUALS (Wings, Trail, Rain, Snow, Sky) ==========
+-- ========== VISUALS (Wings, Trail, Halo, Rain, Snow, Sky) ==========
 local Visuals = {}
 Visuals.WingsEnabled = false
 Visuals.TrailEnabled = false
+Visuals.HaloEnabled = false
 Visuals.RainEnabled = false
 Visuals.SnowEnabled = false
 Visuals.SkyEnabled = false
@@ -610,45 +611,120 @@ Visuals.SkyColor = Color3.fromRGB(100, 50, 150) -- Default purple
 Visuals.Objects = {}
 Visuals.Connections = {}
 
--- 1. Wings
+-- AngelicWings ヘルパー
+local WING_COLOR = Color3.fromRGB(133, 220, 255)
+local WING_TEXTURES = {
+	Wing = "rbxassetid://13267054240",
+	Glow = "rbxassetid://11402221943",
+}
+local WING_OFFSETS = {
+	Left = {
+		cframe = CFrame.new(-1.012, 0.5, 0.852, 0.966, 0, 0.259, 0, 1, 0, -0.259, 0, 0.966),
+		direction = Enum.NormalId.Back,
+	},
+	Right = {
+		cframe = CFrame.new(1.167, 0.5, 0.852, 0.966, 0, -0.259, 0, 1, 0, 0.259, 0, 0.966),
+		direction = Enum.NormalId.Front,
+	},
+}
+
+local function getTorso(character)
+	local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 5)
+	if not humanoid then return nil end
+	local isR15 = humanoid.RigType == Enum.HumanoidRigType.R15
+	return character:FindFirstChild(isR15 and "UpperTorso" or "Torso") or character:WaitForChild(isR15 and "UpperTorso" or "Torso", 5)
+end
+
+local function createAttachment(parent, name, cframe)
+	local attachment = Instance.new("Attachment")
+	attachment.Name = name
+	attachment.CFrame = cframe
+	attachment.Parent = parent
+	return attachment
+end
+
+local function createWingEmitter(attachment, direction)
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = WING_TEXTURES.Wing
+	emitter.Color = ColorSequence.new(WING_COLOR)
+	emitter.LightEmission = 1
+	emitter.LockedToPart = true
+	emitter.Lifetime = NumberRange.new(1)
+	emitter.Rate = 4
+	emitter.Speed = NumberRange.new(0.05)
+	emitter.Size = NumberSequence.new(2.75, 3.5)
+	emitter.Rotation = NumberRange.new(-15)
+	emitter.EmissionDirection = direction
+	emitter.Orientation = Enum.ParticleOrientation.VelocityPerpendicular
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.944),
+		NumberSequenceKeypoint.new(0.2, 0),
+		NumberSequenceKeypoint.new(0.8, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Parent = attachment
+	return emitter
+end
+
+local function createGlowEmitter(attachment)
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = WING_TEXTURES.Glow
+	emitter.Color = ColorSequence.new(WING_COLOR)
+	emitter.Brightness = 2
+	emitter.LightEmission = 1
+	emitter.LockedToPart = true
+	emitter.Lifetime = NumberRange.new(2)
+	emitter.Rate = 5
+	emitter.Speed = NumberRange.new(0.5)
+	emitter.Size = NumberSequence.new(3, 4)
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.SpreadAngle = Vector2.new(180, 180)
+	emitter.FlipbookLayout = Enum.ParticleFlipbookLayout.Grid4x4
+	emitter.FlipbookMode = Enum.ParticleFlipbookMode.OneShot
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0.3),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Parent = attachment
+	return emitter
+end
+
+local function clearWings()
+	if Visuals.Objects.WingAttachments then
+		for _, att in ipairs(Visuals.Objects.WingAttachments) do
+			if att and att.Parent then att:Destroy() end
+		end
+		Visuals.Objects.WingAttachments = nil
+	end
+	local char = LocalPlayer.Character
+	if char then
+		for _, desc in ipairs(char:GetDescendants()) do
+			if desc:IsA("Attachment") and (desc.Name == "Wing_Left" or desc.Name == "Wing_Right" or desc.Name == "Wing_Glow") then
+				desc:Destroy()
+			end
+		end
+	end
+end
+
+-- 1. Wings (AngelicWings)
 function Visuals.SetWings(state)
     if Visuals.WingsEnabled == state then return end
     Visuals.WingsEnabled = state
-    local char = LocalPlayer.Character
-    if state and char then
-        local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-        local wings = Instance.new("Part")
-        wings.Name = "AsasWings"
-        wings.Size = Vector3.new(4, 2, 0.2)
-        wings.Transparency = 0.3
-        wings.Color = Color3.fromRGB(150, 0, 255) -- Purple
-        wings.Material = Enum.Material.Neon
-        wings.CanCollide = false
-        wings.Massless = true
-        wings.Parent = char
-        
-        local weld = Instance.new("WeldConstraint")
-        weld.Part0 = hrp
-        weld.Part1 = wings
-        weld.Parent = wings
-        
-        -- Position behind
-        wings.CFrame = hrp.CFrame * CFrame.new(0, 1, 2) 
-        
-        -- Particle effect
-        local attachment = Instance.new("Attachment", wings)
-        local emitter = Instance.new("ParticleEmitter", attachment)
-        emitter.Texture = "rbxassetid://243660364"
-        emitter.Color = ColorSequence.new(Color3.fromRGB(200, 100, 255))
-        emitter.Size = NumberSequence.new(1, 0)
-        emitter.Lifetime = NumberRange.new(0.5, 1)
-        emitter.Rate = 20
-        emitter.Speed = NumberRange.new(2)
-        emitter.SpreadAngle = Vector2.new(180, 180)
-        
-        Visuals.Objects.Wings = wings
-    else
-        if Visuals.Objects.Wings then Visuals.Objects.Wings:Destroy(); Visuals.Objects.Wings = nil end
+    clearWings()
+    if state and LocalPlayer.Character then
+        local torso = getTorso(LocalPlayer.Character)
+        if not torso then return end
+        local created = {}
+        for side, wing in pairs(WING_OFFSETS) do
+            local attachment = createAttachment(torso, "Wing_" .. side, wing.cframe)
+            createWingEmitter(attachment, wing.direction)
+            table.insert(created, attachment)
+        end
+        local glowAtt = createAttachment(torso, "Wing_Glow", CFrame.new(0, 0.3, 0))
+        createGlowEmitter(glowAtt)
+        table.insert(created, glowAtt)
+        Visuals.Objects.WingAttachments = created
     end
 end
 
@@ -679,6 +755,76 @@ function Visuals.SetTrail(state)
             for _, att in ipairs(Visuals.Objects.TrailAttachments) do att:Destroy() end
             Visuals.Objects.TrailAttachments = nil
         end
+    end
+end
+
+-- 2.5 Halo (AngelicHalo)
+local HALO_COLOR = Color3.fromRGB(133, 220, 255)
+local HALO_TEXTURE = "rbxassetid://8819682608"
+local HALO_OFFSET = CFrame.new(
+	-0.25, 0.933, 0.259,
+	0.469, -0.25, -0.847,
+	-0.117, 0.933, -0.34,
+	0.875, 0.259, 0.408
+)
+local HALO_LAYERS = {
+	NumberSequence.new(2.5, 3),
+	NumberSequence.new(2, 3),
+}
+
+local function createHaloLayer(attachment, size)
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = HALO_TEXTURE
+	emitter.Color = ColorSequence.new(HALO_COLOR)
+	emitter.Brightness = 2
+	emitter.LightEmission = 1
+	emitter.LockedToPart = true
+	emitter.Lifetime = NumberRange.new(1)
+	emitter.Rate = 7
+	emitter.Speed = NumberRange.new(0.001)
+	emitter.Size = size
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.RotSpeed = NumberRange.new(-400, 400)
+	emitter.SpreadAngle = Vector2.new(5, 5)
+	emitter.Orientation = Enum.ParticleOrientation.VelocityPerpendicular
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.2, 0),
+		NumberSequenceKeypoint.new(0.8, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Parent = attachment
+	return emitter
+end
+
+local function clearHalo()
+	if Visuals.Objects.HaloAttachment and Visuals.Objects.HaloAttachment.Parent then
+		Visuals.Objects.HaloAttachment:Destroy()
+	end
+	Visuals.Objects.HaloAttachment = nil
+	local char = LocalPlayer.Character
+	if char then
+		local head = char:FindFirstChild("Head")
+		local existing = head and head:FindFirstChild("Halo")
+		if existing then existing:Destroy() end
+	end
+end
+
+function Visuals.SetHalo(state)
+    if Visuals.HaloEnabled == state then return end
+    Visuals.HaloEnabled = state
+    clearHalo()
+    if state and LocalPlayer.Character then
+        local head = LocalPlayer.Character:FindFirstChild("Head") or LocalPlayer.Character:WaitForChild("Head", 5)
+        if not head then return end
+        local attachment = Instance.new("Attachment")
+        attachment.Name = "Halo"
+        attachment.CFrame = HALO_OFFSET
+        attachment.Parent = head
+        for _, size in ipairs(HALO_LAYERS) do
+            createHaloLayer(attachment, size)
+        end
+        Visuals.Objects.HaloAttachment = attachment
     end
 end
 
@@ -786,6 +932,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
     if Visuals.WingsEnabled then Visuals.WingsEnabled = false; Visuals.SetWings(true) end
     if Visuals.TrailEnabled then Visuals.TrailEnabled = false; Visuals.SetTrail(true) end
+    if Visuals.HaloEnabled then Visuals.HaloEnabled = false; Visuals.SetHalo(true) end
 end)
 
 
@@ -1554,11 +1701,12 @@ local Passed, Statement = pcall(function()
 
     -- Visuals Tab (New)
     local visTab = window:CreatePage({Icon = "rbxassetid://8547256547"})
-    local visSec = visTab:CreateSection({Name = "Visuals", Size = 200, Side = "Left"})
+    local visSec = visTab:CreateSection({Name = "Visuals", Size = 220, Side = "Left"})
     local skySec = visTab:CreateSection({Name = "Sky & Weather", Size = 180, Side = "Right"})
 
     visSec:CreateToggle({Id = "Wings", Name = "Wings", State = false, Callback = function(state) Visuals.SetWings(state) end})
     visSec:CreateToggle({Id = "Trail", Name = "Trail", State = false, Callback = function(state) Visuals.SetTrail(state) end})
+    visSec:CreateToggle({Id = "Halo", Name = "Halo Aura", State = false, Callback = function(state) Visuals.SetHalo(state) end})
     
     skySec:CreateToggle({Id = "SkyColor", Name = "Sky Color", State = false, Callback = function(state) Visuals.SetSkyColor(state, Visuals.SkyColor) end})
     -- 色変更ボタン
