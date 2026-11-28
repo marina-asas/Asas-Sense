@@ -574,7 +574,10 @@ function Aim.SetSilent(state)
             if not Aim.SilentEnabled then return end
             local target = getClosestTarget(Aim.SilentFOV)
             if target and math.random(1, 100) <= Aim.SilentChance then
-                local oldCF = Camera.CFrame; Camera.CFrame = CFrame.new(oldCF.Position, target.Position); task.wait(); Camera.CFrame = oldCF
+                local oldCF = Camera.CFrame
+                Camera.CFrame = CFrame.new(oldCF.Position, target.Position)
+                RunService.RenderStepped:Wait()
+                if Aim.SilentEnabled then Camera.CFrame = oldCF end
             end
         end)
     else if Aim._silentConn then Aim._silentConn:Disconnect(); Aim._silentConn = nil end end
@@ -588,10 +591,12 @@ function Aim.SetTrigger(state)
             local target = getClosestTarget(Aim.SilentFOV)
             if target and not Aim._triggerTask then
                 Aim._triggerTask = task.delay(Aim.TriggerDelay, function()
-                    if Aim.TriggerEnabled and target then
-                        local vu = game:GetService("VirtualUser"); vu:ClickButton1(Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2))
-                    end
                     Aim._triggerTask = nil
+                    if Aim.TriggerEnabled and getClosestTarget(Aim.SilentFOV) then
+                        local vu = game:GetService("VirtualUser")
+                        vu:CaptureController()
+                        vu:ClickButton1(Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2), Camera.CFrame)
+                    end
                 end)
             end
         end)
@@ -1662,8 +1667,10 @@ local Passed, Statement = pcall(function()
 
         function sections:CreateSlider(Properties)
             Properties = Properties or {}
-            local Content = {Name = Properties.Name or nil, State = Properties.State or 0, Min = Properties.Min or 0, Max = Properties.Max or 100, Ending = Properties.Suffix or "", Decimals = (1 / (Properties.Decimals or 1)), Callback = Properties.Callback or function() end, Holding = false, Window = self.Window, Page = self.Page, Section = self, Id = Properties.Id or Properties.Name}
-            if AutoloadEnabled and Content.Id and ConfigData[Content.Id] and ConfigData[Content.Id].State then 
+            local decimalPlaces = math.max(0, math.floor(Properties.Decimals or 0))
+            local stepScale = 10 ^ decimalPlaces
+            local Content = {Name = Properties.Name or nil, State = Properties.State or 0, Min = Properties.Min or 0, Max = Properties.Max or 100, Ending = Properties.Suffix or "", Scale = stepScale, Callback = Properties.Callback or function() end, Holding = false, Window = self.Window, Page = self.Page, Section = self, Id = Properties.Id or Properties.Name}
+            if AutoloadEnabled and Content.Id and ConfigData[Content.Id] and type(ConfigData[Content.Id].State) == "number" then 
                 Content.State = ConfigData[Content.Id].State 
             end
             do
@@ -1675,16 +1682,22 @@ local Passed, Statement = pcall(function()
                 local Outline_Frame_Slider = utility:RenderObject("Frame", {BackgroundColor3 = Content.Window.Accent, BorderSizePixel = 0, Parent = Holder_Outline_Frame, Size = UDim2.new(0, 0, 1, 0), ZIndex = 3})
                 local Frame_Slider_Title = utility:RenderObject("TextLabel", {BackgroundTransparency = 1, BorderSizePixel = 0, Parent = Outline_Frame_Slider, Position = UDim2.new(1, 0, 0.5, 1), Size = UDim2.new(0, 2, 1, 0), ZIndex = 3, Font = "Code", RichText = true, Text = "", TextColor3 = Color3.fromRGB(255, 255, 255), TextSize = 11, TextXAlignment = "Center", RenderTime = 0.15})
                 function Content:Set(state, isLoad)
-                    Content.State = math.clamp(math.round(state * Content.Decimals) / Content.Decimals, Content.Min, Content.Max)
-                    Frame_Slider_Title.Text = "<b>" .. Content.State .. Content.Ending .. "</b>"
-                    Outline_Frame_Slider.Size = UDim2.new((1 - ((Content.Max - Content.State) / (Content.Max - Content.Min))), 0, 1, 0)
+                    local rounded = math.round(tonumber(state) * Content.Scale) / Content.Scale
+                    Content.State = math.clamp(rounded, Content.Min, Content.Max)
+                    Frame_Slider_Title.Text = "<b>" .. tostring(Content.State) .. Content.Ending .. "</b>"
+                    local span = (Content.Max - Content.Min)
+                    local ratio = span > 0 and math.clamp((Content.State - Content.Min) / span, 0, 1) or 0
+                    Outline_Frame_Slider.Size = UDim2.new(ratio, 0, 1, 0)
                     Content.Callback(Content:Get())
-                    if not isLoad and AutoloadEnabled and Content.Id then ConfigData[Content.Id] = ConfigData[Content.Id] or {}; ConfigData[Content.Id].State = state; SaveConfig() end
+                    if not isLoad and AutoloadEnabled and Content.Id then ConfigData[Content.Id] = ConfigData[Content.Id] or {}; ConfigData[Content.Id].State = Content.State; SaveConfig() end
                 end
                 function Content:Refresh()
                     local Mouse = utility:MouseLocation()
-                    local X = math.clamp(Mouse.X - Holder_Outline_Frame.AbsolutePosition.X, 0, Holder_Outline_Frame.AbsoluteSize.X)
-                    Content:Set(math.clamp(math.floor((Content.Min + (Content.Max - Content.Min) * (X / Holder_Outline_Frame.AbsoluteSize.X)) * Content.Decimals) / Content.Decimals, Content.Min, Content.Max))
+                    local width = Holder_Outline_Frame.AbsoluteSize.X
+                    if width <= 0 then return end
+                    local ratio = math.clamp((Mouse.X - Holder_Outline_Frame.AbsolutePosition.X) / width, 0, 1)
+                    local rawVal = Content.Min + (Content.Max - Content.Min) * ratio
+                    Content:Set(rawVal)
                 end
                 function Content:Get() return Content.State end
                 utility:CreateConnection(Content_Holder_Button.MouseButton1Down, function() Content:Refresh(); Content.Holding = true end)
